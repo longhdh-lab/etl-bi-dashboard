@@ -1,0 +1,6 @@
+order_id,timestamp,amount,category
+ORD-1001,2026-03-01 10:15:00,150.50,Electronics
+ORD-1002,2026-03-01 11:20:00,89.00,Clothing
+ORD-1003,2026-03-02 09:05:00,210.00,Home
+ORD-1004,2026-03-02 14:30:00,45.25,Books
+ORD-1005,2026-03-03 16:45:00,320.00,Electronics

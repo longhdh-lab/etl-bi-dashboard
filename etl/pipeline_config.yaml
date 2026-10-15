@@ -1,0 +1,26 @@
+# Cấu hình Kết nối MySQL
+mysql:
+  host: "localhost"
+  port: 3306
+  user: "root"
+  password: "root"
+  database: "sales_db"
+  table_name: "orders"
+  watermark_column: "created_at"  # Cột thời gian để thực hiện Incremental Extract
+
+# Cấu hình Đọc File từ Thư mục
+file_source:
+  folder_path: "etl/data"
+  batch_size: 5  # Số lượng file tối đa xử lý trong mỗi đợt (Batch/Chunking)
+
+# Mapping cấu trúc dữ liệu (Giúp đồng bộ tên cột từ nguồn về chuẩn Data Warehouse)
+schema_mapping:
+  id_col: "order_id"
+  date_col: "timestamp"
+  amount_col: "amount"
+  category_col: "category"
+
+# Cấu hình Output Data Warehouse (SQLite)
+destination:
+  db_path: "warehouse.db"
+  target_table: "fact_daily_sales"
