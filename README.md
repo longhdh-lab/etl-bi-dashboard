@@ -1,7 +1,3 @@
-Bạn đang ở **Ask mode** — tôi không thể tạo file trên disk. Dưới đây là nội dung `README.md` đầy đủ; bạn có thể copy vào root project, hoặc chuyển sang **Agent mode** để tôi tạo giúp.
-
----
-
 ```markdown
 # ETL BI Dashboard
 
