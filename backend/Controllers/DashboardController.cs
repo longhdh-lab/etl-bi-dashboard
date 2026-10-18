@@ -1,7 +1,6 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.Sqlite;
-using Dapper;
 using backend.Models;
+using backend.Services;
+using Microsoft.AspNetCore.Mvc;
 
 namespace backend.Controllers
 {
@@ -9,40 +8,75 @@ namespace backend.Controllers
     [Route("api/[controller]")]
     public class DashboardController : ControllerBase
     {
-        private readonly string _connectionString;
+        private readonly DashboardService _dashboardService;
 
-        public DashboardController(IConfiguration configuration)
+        public DashboardController(DashboardService dashboardService)
         {
-            // Trỏ kết nối ra file warehouse.db ở thư mục gốc
-            string dbPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "warehouse.db");
-            _connectionString = $"Data Source={dbPath}";
+            _dashboardService = dashboardService;
         }
 
         [HttpGet("summary")]
         public async Task<IActionResult> GetSummary()
         {
-            if (!System.IO.File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "..", "warehouse.db")))
+            try
             {
-                return NotFound("Database file 'warehouse.db' not found. Please run ETL script first.");
+                var response = await _dashboardService.GetSummaryAsync();
+                return Ok(response);
             }
-
-            using var connection = new SqliteConnection(_connectionString);
-            
-            var query = "SELECT date, total_revenue, total_orders, avg_order_value FROM fact_daily_sales ORDER BY date ASC";
-            var salesData = (await connection.QueryAsync<DailySalesDto>(query)).ToList();
-
-            var response = new DashboardSummaryResponse
+            catch (InvalidOperationException ex)
             {
-                Kpis = new KpiDto
-                {
-                    TotalRevenue = Math.Round(salesData.Sum(x => x.Total_Revenue), 2),
-                    TotalOrders = salesData.Sum(x => x.Total_Orders),
-                    AvgOrderValue = salesData.Count > 0 ? Math.Round(salesData.Average(x => x.Avg_Order_Value), 2) : 0
-                },
-                ChartData = salesData
-            };
+                return NotFound(ex.Message);
+            }
+        }
 
-            return Ok(response);
+        [HttpGet("tables")]
+        public async Task<IActionResult> GetTables([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            try
+            {
+                var response = await _dashboardService.GetTablesAsync(page, pageSize);
+                return Ok(response);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(ex.Message);
+            }
+        }
+
+        [HttpGet("tables/{tableName}")]
+        public async Task<IActionResult> GetTableDetail(string tableName, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            try
+            {
+                var response = await _dashboardService.GetTableDetailAsync(tableName, page, pageSize);
+                return Ok(response);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(ex.Message);
+            }
+        }
+
+        [HttpGet("overview")]
+        public async Task<IActionResult> GetOverview()
+        {
+            try
+            {
+                var response = await _dashboardService.GetOverviewAsync();
+                return Ok(response);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(ex.Message);
+            }
         }
     }
 }

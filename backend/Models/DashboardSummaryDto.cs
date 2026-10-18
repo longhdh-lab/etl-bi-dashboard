@@ -20,4 +20,44 @@ namespace backend.Models
         public KpiDto Kpis { get; set; } = new();
         public List<DailySalesDto> ChartData { get; set; } = new();
     }
+
+    public class WarehouseTableSummaryDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public long RowCount { get; set; }
+        public int ColumnCount { get; set; }
+        public List<string> Columns { get; set; } = new();
+        public DateTimeOffset LastRefreshed { get; set; }
+    }
+
+    public class WarehouseTableListResponse
+    {
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+        public int TotalItems { get; set; }
+        public int TotalPages { get; set; }
+        public List<WarehouseTableSummaryDto> Items { get; set; } = new();
+    }
+
+    public class WarehouseTableDetailResponse
+    {
+        public string Name { get; set; } = string.Empty;
+        public long RowCount { get; set; }
+        public int ColumnCount { get; set; }
+        public List<string> Columns { get; set; } = new();
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+        public int TotalPages { get; set; }
+        public List<Dictionary<string, object?>> Preview { get; set; } = new();
+        public DateTimeOffset LastRefreshed { get; set; }
+    }
+
+    public class DashboardOverviewResponse
+    {
+        public string WarehousePath { get; set; } = string.Empty;
+        public int TotalTables { get; set; }
+        public long TotalRows { get; set; }
+        public DateTimeOffset LastRefreshed { get; set; }
+        public List<WarehouseTableSummaryDto> Tables { get; set; } = new();
+    }
 }
