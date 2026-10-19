@@ -17,12 +17,14 @@ Theo dõi công việc đã hoàn thành và còn lại. Cập nhật status khi
 - [x] Thêm script MySQL mẫu `Northwind_mysql.sql`
 - [x] Viết `README.md` (giới thiệu, build local, release)
 
-### ETL (`etl/`) — MVP hiện tại (chỉ sales / orders)
+### ETL (`etl/`) — đa bảng
 - [x] Pipeline Extract → Transform → Load (`etl_pipeline.py`)
-- [x] YAML cơ bản: 1 MySQL table + 1 folder file + schema mapping sales
-- [x] Extract MySQL (fallback khi DB lỗi) + extract folder (CSV/JSON/Excel, batch)
+- [x] YAML nhiều DB/file source với schema riêng từng bảng
+- [x] Extract MySQL (fallback có cảnh báo khi DB lỗi) + extract CSV/JSON/Excel
+- [x] Nạp riêng customer, product, order và các bảng Northwind khác
 - [x] Transform aggregate → `fact_daily_sales`
-- [x] Load vào `warehouse.db`
+- [x] Merge nguồn cùng target table và load vào `warehouse.db`
+- [x] Thêm `etl/requirements.txt`
 
 ### Backend (`backend/`) — MVP hiện tại
 - [x] ASP.NET Core Web API (`net10.0`) + Swagger + CORS
@@ -42,7 +44,7 @@ Theo dõi công việc đã hoàn thành và còn lại. Cập nhật status khi
 ### P0 — Đa nguồn YAML → Warehouse → FE tổng hợp (ưu tiên cao nhất)
 
 #### 1. ETL: config & thu gom CSV + DB
-- [ ] Mở rộng `pipeline_config.yaml` hỗ trợ **nhiều** nguồn file, ví dụ:
+- [x] Mở rộng `pipeline_config.yaml` hỗ trợ **nhiều** nguồn file, ví dụ:
   ```yaml
   file_sources:
     - name: customers
@@ -55,7 +57,7 @@ Theo dõi công việc đã hoàn thành và còn lại. Cập nhật status khi
       path: etl/data/orders.csv
       target_table: fact_orders
   ```
-- [ ] Mở rộng YAML hỗ trợ **nhiều** source table từ DB, ví dụ:
+- [x] Mở rộng YAML hỗ trợ **nhiều** source table từ DB, ví dụ:
   ```yaml
   db_sources:
     - name: mysql_orders
@@ -69,11 +71,11 @@ Theo dõi công việc đã hoàn thành và còn lại. Cập nhật status khi
       target_table: fact_orders
     # thêm tables khác: customers, products, order_details, ...
   ```
-- [ ] Extract từng nguồn độc lập (schema riêng từng bảng — **không** ép chung `order_id/timestamp/amount`)
-- [ ] Merge cùng `target_table` nếu vừa CSV vừa DB (union / concat, xử lý trùng cột)
-- [ ] Load từng bảng vào `warehouse.db` (`if_exists=replace` hoặc strategy rõ ràng)
-- [ ] Giữ / mở rộng fact tổng hợp doanh thu (`fact_daily_sales`) nếu vẫn cần cho chart orders
-- [ ] Thêm `etl/requirements.txt`
+- [x] Extract từng nguồn độc lập (schema riêng từng bảng — **không** ép chung `order_id/timestamp/amount`)
+- [x] Merge cùng `target_table` nếu vừa CSV vừa DB (union / concat, xử lý trùng cột)
+- [x] Load từng bảng vào `warehouse.db` (`if_exists=replace` hoặc strategy rõ ràng)
+- [x] Giữ / mở rộng fact tổng hợp doanh thu (`fact_daily_sales`) nếu vẫn cần cho chart orders
+- [x] Thêm `etl/requirements.txt`
 
 #### 2. Backend: API đa bảng
 - [ ] Đọc `warehouse.db` path từ YAML runtime (sửa YAML + restart là ăn, **không rebuild**)

@@ -1,12 +1,59 @@
 # Cấu hình Kết nối MySQL
-mysql:
+mysql: &mysql_source
   host: "localhost"
   port: 3306
   user: "root"
-  password: "root"
+  password: "Kien@123"
   database: "sales_db"
   table_name: "orders"
   watermark_column: "created_at"  # Cột thời gian để thực hiện Incremental Extract
+
+# Các bảng DB được đọc độc lập; cấu hình kết nối kế thừa từ mysql ở trên.
+db_sources:
+  - <<: *mysql_source
+    name: mysql_orders
+    type: mysql
+    table: orders
+    target_table: fact_orders
+
+# Mỗi file hoặc folder được nạp vào một bảng riêng.
+file_sources:
+  - name: customers
+    path: etl/data/customers.csv
+    target_table: dim_customers
+  - name: products
+    path: etl/data/products.csv
+    target_table: dim_products
+  - name: orders
+    path: etl/data/orders.csv
+    target_table: fact_orders
+  - name: order_details
+    path: etl/data/order_details.csv
+    target_table: fact_order_details
+  - name: categories
+    path: etl/data/categories.csv
+    target_table: dim_categories
+  - name: employees
+    path: etl/data/employees.csv
+    target_table: dim_employees
+  - name: employee_territories
+    path: etl/data/employee_territories.csv
+    target_table: bridge_employee_territories
+  - name: region
+    path: etl/data/region.csv
+    target_table: dim_regions
+  - name: shippers
+    path: etl/data/shippers.csv
+    target_table: dim_shippers
+  - name: suppliers
+    path: etl/data/suppliers.csv
+    target_table: dim_suppliers
+  - name: territories
+    path: etl/data/territories.csv
+    target_table: dim_territories
+  - name: sales_raw
+    path: etl/data/sales_raw.csv
+    target_table: raw_sales
 
 # Cấu hình Đọc File từ Thư mục
 file_source:

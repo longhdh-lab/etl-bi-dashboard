@@ -4,6 +4,7 @@ import sqlite3
 import yaml
 import pandas as pd
 from sqlalchemy import URL, create_engine
+from sqlalchemy.exc import SQLAlchemyError
 
 # 1. Đọc và tải file cấu hình YAML
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -49,16 +50,115 @@ def extract_from_mysql(config):
 def read_single_file(file_path):
     """Đọc file theo định dạng extension tự động"""
     ext = os.path.splitext(file_path)[1].lower()
+    if ext == '.csv':
+        return pd.read_csv(file_path)
+    elif ext in ['.xlsx', '.xls']:
+        return pd.read_excel(file_path)
+    elif ext == '.json':
+        return pd.read_json(file_path)
+    raise ValueError(f"Định dạng file không được hỗ trợ: {file_path}")
+
+def resolve_project_path(path):
+    if os.path.isabs(path):
+        return path
+    project_root = os.path.dirname(BASE_DIR)
+    return os.path.abspath(os.path.join(project_root, path))
+
+def extract_from_file_source(source):
+    source_path = resolve_project_path(source['path'])
+    if not os.path.exists(source_path):
+        raise FileNotFoundError(f"Không tìm thấy file source: {source_path}")
+
+    if os.path.isfile(source_path):
+        return read_single_file(source_path)
+
+    supported_extensions = ('*.csv', '*.json', '*.xlsx', '*.xls')
+    files = []
+    for extension in supported_extensions:
+        files.extend(glob.glob(os.path.join(source_path, extension)))
+    files.sort()
+    if not files:
+        raise FileNotFoundError(f"Không tìm thấy file CSV/JSON/Excel trong folder: {source_path}")
+
+    batch_size = source.get('batch_size', 5)
+    if batch_size < 1:
+        raise ValueError(f"batch_size phải lớn hơn 0 cho source '{source['name']}'")
+
+    batches = []
+    for start in range(0, len(files), batch_size):
+        batch = [read_single_file(path) for path in files[start:start + batch_size]]
+        batches.extend(frame for frame in batch if not frame.empty)
+
+    if not batches:
+        return pd.DataFrame()
+    return pd.concat(batches, ignore_index=True, sort=False)
+
+def extract_from_db_source(source):
+    source_type = source.get('type', 'mysql').lower()
+    if source_type != 'mysql':
+        raise ValueError(f"Loại DB source chưa được hỗ trợ: {source_type}")
+
+    table_name = source.get('table', source.get('table_name'))
+    if not table_name:
+        raise KeyError(f"Thiếu 'table' trong DB source '{source['name']}'")
+
+    connection_url = URL.create(
+        drivername="mysql+pymysql",
+        username=source['user'],
+        password=source['password'],
+        host=source['host'],
+        port=source.get('port', 3306),
+        database=source['database'],
+    )
+    engine = create_engine(connection_url)
     try:
-        if ext == '.csv':
-            return pd.read_csv(file_path)
-        elif ext in ['.xlsx', '.xls']:
-            return pd.read_excel(file_path)
-        elif ext == '.json':
-            return pd.read_json(file_path)
-    except Exception as e:
-        print(f" ❌ Lỗi đọc file {file_path}: {e}")
-    return pd.DataFrame()
+        return pd.read_sql_table(table_name, engine)
+    except SQLAlchemyError as error:
+        print(f" ⚠️ [DB:{source['name']}] Không thể đọc bảng '{table_name}': {error}")
+        return pd.DataFrame()
+    finally:
+        engine.dispose()
+
+def load_table(df, target_table, config):
+    destination = config['destination']
+    db_path = resolve_project_path(destination['db_path'])
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+    connection = sqlite3.connect(db_path)
+    try:
+        df.to_sql(target_table, connection, if_exists="replace", index=False)
+    finally:
+        connection.close()
+    print(f"✅ Đã ghi {len(df)} bản ghi vào '{target_table}' ({db_path}).")
+
+def run_multi_source_pipeline(config):
+    frames_by_table = {}
+    sales_frames = []
+
+    for source in config.get('file_sources', []):
+        frame = extract_from_file_source(source)
+        target_table = source['target_table']
+        frames_by_table.setdefault(target_table, []).append(frame)
+        if source['name'].lower() == 'sales_raw':
+            sales_frames.append(frame)
+        print(f"📁 [File:{source['name']}] Đã đọc {len(frame)} bản ghi.")
+
+    for source in config.get('db_sources', []):
+        frame = extract_from_db_source(source)
+        target_table = source['target_table']
+        frames_by_table.setdefault(target_table, []).append(frame)
+        if source['name'].lower() == 'sales_raw':
+            sales_frames.append(frame)
+        print(f"🗄️ [DB:{source['name']}] Đã đọc {len(frame)} bản ghi.")
+
+    for target_table, frames in frames_by_table.items():
+        combined = pd.concat(frames, ignore_index=True, sort=False)
+        load_table(combined, target_table, config)
+
+    if sales_frames:
+        sales_data = pd.concat(sales_frames, ignore_index=True, sort=False)
+        daily_summary = transform(sales_data, config)
+        load_table(daily_summary, config['destination']['target_table'], config)
 
 def extract_from_folder(config):
     folder_cfg = config['file_source']
@@ -162,16 +262,14 @@ if __name__ == "__main__":
     # Tải cấu hình
     config = load_config()
 
-    # 1. Trích xuất dữ liệu từ các nguồn
-    df_mysql = extract_from_mysql(config)
-    df_folder = extract_from_folder(config)
-
-    # 2. Hợp nhất dữ liệu đa nguồn (Multi-source Merging)
-    raw_df = pd.concat([df_mysql, df_folder], ignore_index=True)
-
-    # 3. Transform & Load
-    summary_df = transform(raw_df, config)
-    load(summary_df, config)
+    if 'file_sources' in config or 'db_sources' in config:
+        run_multi_source_pipeline(config)
+    else:
+        df_mysql = extract_from_mysql(config)
+        df_folder = extract_from_folder(config)
+        raw_df = pd.concat([df_mysql, df_folder], ignore_index=True)
+        summary_df = transform(raw_df, config)
+        load(summary_df, config)
 
 # ==========================================
 # 3. HELPER FUNCTIONS
