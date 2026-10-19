@@ -3,7 +3,7 @@ import glob
 import sqlite3
 import yaml
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import URL, create_engine
 
 # 1. Đọc và tải file cấu hình YAML
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,7 +23,15 @@ def extract_from_mysql(config):
     print(f"📥 [MySQL] Đang kết nối tới DB '{db_cfg['database']}', bảng '{db_cfg['table_name']}'...")
     
     try:
-        connection_url = f"mysql+pymysql://{db_cfg['user']}:{db_cfg['password']}@{db_cfg['host']}:{db_cfg['port']}/{db_cfg['database']}"
+        connection_url = URL.create(
+            drivername="mysql+pymysql",
+            username="root",
+            password="Kien@123",
+            host="localhost",
+            port=3306,
+            database="sales_db",
+        )
+        # connection_url = f"mysql+pymysql://{db_cfg['user']}:{db_cfg['password']}@{db_cfg['host']}:{db_cfg['port']}/{db_cfg['database']}"
         engine = create_engine(connection_url)
         
         # Đọc dữ liệu dựa trên bảng và cột watermark định nghĩa từ config
