@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
 import {
   BarChart,
   Bar,
@@ -11,9 +10,14 @@ import {
   ResponsiveContainer,
   CartesianGrid
 } from 'recharts';
+import {
+  getAllTables,
+  getApiErrorMessage,
+  getOverview,
+  getSalesSummary,
+  getTableDetail
+} from './dashboardApi';
 import './App.css';
-
-const API_BASE = 'http://localhost:5000';
 
 const formatNumber = (value) => Number(value || 0).toLocaleString();
 
@@ -59,6 +63,7 @@ function App() {
   const [dateTo, setDateTo] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(null);
+  const [summaryError, setSummaryError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -76,15 +81,11 @@ function App() {
     setDetailError(null);
 
     try {
-      const response = await axios.get(
-        `${API_BASE}/api/dashboard/tables/${encodeURIComponent(tableName)}?page=${page}&pageSize=20`
-      );
-
-      setSelectedTable(response.data || null);
+      setSelectedTable(await getTableDetail(tableName, page));
     } catch (err) {
       console.error('Lỗi tải chi tiết bảng:', err);
       setSelectedTable(null);
-      setDetailError('Không thể tải chi tiết bảng này.');
+      setDetailError(getApiErrorMessage(err, 'Không thể tải chi tiết bảng này.'));
     } finally {
       setDetailLoading(false);
     }
@@ -96,18 +97,30 @@ function App() {
       setError(null);
 
       try {
-        const [overviewRes, tablesRes, summaryRes] = await Promise.all([
-          axios.get(`${API_BASE}/api/dashboard/overview`),
-          axios.get(`${API_BASE}/api/dashboard/tables?page=1&pageSize=50`),
-          axios.get(`${API_BASE}/api/dashboard/summary`)
+        const [overviewData, tables] = await Promise.all([
+          getOverview(),
+          getAllTables()
         ]);
+        setOverview(overviewData);
+        setTableData(tables);
 
-        setOverview(overviewRes.data || null);
-        setTableData(Array.isArray(tablesRes.data?.items) ? tablesRes.data.items : []);
-        setSummary(summaryRes.data || null);
+        try {
+          setSummary(await getSalesSummary());
+          setSummaryError(null);
+        } catch (summaryRequestError) {
+          console.error('Lỗi tải sales summary:', summaryRequestError);
+          setSummary(null);
+          setSummaryError(getApiErrorMessage(
+            summaryRequestError,
+            'Không thể tải báo cáo doanh thu.'
+          ));
+        }
       } catch (err) {
         console.error('Lỗi kết nối API C#:', err);
-        setError('Không thể tải dữ liệu warehouse. Hãy đảm bảo backend đang chạy và warehouse.db đã được tạo.');
+        setError(getApiErrorMessage(
+          err,
+          'Không thể tải dữ liệu warehouse. Hãy kiểm tra backend và warehouse.db.'
+        ));
       } finally {
         setLoading(false);
       }
@@ -298,7 +311,7 @@ function App() {
           <section className="panel">
             <div className="panel-header">
               <h2>Warehouse tables</h2>
-              <span className="muted">{tableData.length} tables</span>
+              <span className="muted">{formatNumber(overview?.totalTables ?? tableData.length)} tables</span>
             </div>
 
             <div className="table-list">
@@ -496,7 +509,9 @@ function App() {
               <span className="muted">fact_daily_sales</span>
             </div>
 
-            {summary?.chartData?.length ? (
+            {summaryError ? (
+              <div className="alert error">{summaryError}</div>
+            ) : summary?.chartData?.length ? (
               <div className="chart-wrap">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={summary.chartData}>

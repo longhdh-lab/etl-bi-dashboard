@@ -9,15 +9,15 @@ Project gồm 3 phần:
 
 | Thành phần | Thư mục | Vai trò |
 |---|---|---|
-| **ETL** | `etl/` | Extract (MySQL + file CSV/JSON/Excel) → Transform (aggregate theo ngày) → Load vào SQLite |
+| **ETL** | `etl/` | Extract nhiều nguồn MySQL + CSV/JSON/Excel → Load từng bảng vào SQLite, đồng thời aggregate doanh thu theo ngày |
 | **Backend** | `backend/` | ASP.NET Core API đọc `warehouse.db`, trả KPI + chart data |
 | **Frontend** | `frontend/` | React (Vite) dashboard hiển thị KPI và biểu đồ doanh thu |
 
 Luồng dữ liệu:
 
 ```
-MySQL / etl/data/*  →  etl_pipeline.py  →  warehouse.db (fact_daily_sales)
-                                              ↓
+MySQL + etl/data/*  →  etl_pipeline.py  →  warehouse.db (nhiều bảng + fact_daily_sales)
+                                                       ↓
                                     DashboardController API
                                               ↓
                                       React Dashboard
@@ -48,24 +48,20 @@ etl-bi-dashboard/
 
 ### Bước 1 — Cài dependency Python (ETL)
 
-Chưa có `requirements.txt` trong repo; cài các package sau:
-
 ```bash
-pip install pandas pyyaml sqlalchemy pymysql openpyxl
+pip install -r etl/requirements.txt
 ```
 
-> `openpyxl` cần nếu đọc file `.xlsx`. PostgreSQL helper (nếu dùng) cần thêm `psycopg2-binary` và `requests` cho API helper.
+`openpyxl` được dùng khi đọc file `.xlsx`.
 
 ### Bước 2 — Cấu hình ETL
 
 Chỉnh `etl/pipeline_config.yaml`:
 
-- **MySQL**: `host`, `port`, `user`, `password`, `database`, `table_name`
-- **File source**: `folder_path` (mặc định `etl/data`), `batch_size`
-- **Schema mapping**: cột nguồn map sang warehouse  
-  - Mặc định: `order_id`, `timestamp`, `amount`  
-  - File mẫu đúng schema: `etl/data/sales_raw.csv`
-- **Destination**: `warehouse.db` → bảng `fact_daily_sales`
+- Thêm một mục vào `file_sources` cho mỗi CSV/JSON/Excel; `path` nhận file hoặc folder và `target_table` là bảng warehouse.
+- Thêm một mục vào `db_sources` cho mỗi bảng DB. Cấu hình MySQL mẫu kế thừa thông tin kết nối trong mục `mysql`; có thể thêm bảng khác với `table` và `target_table` riêng.
+- Các nguồn cùng `target_table` được nối theo tên cột; cột không có ở một nguồn được để trống.
+- Mỗi bảng nguồn được ghi đè (`replace`) khi chạy lại. `sales_raw.csv` tiếp tục tạo `fact_daily_sales` theo `schema_mapping`.
 
 ### Bước 3 — Chạy ETL
 
@@ -75,10 +71,9 @@ Từ thư mục gốc project:
 python etl/etl_pipeline.py
 ```
 
-Kết quả: tạo/ghi đè `warehouse.db` với bảng `fact_daily_sales`  
-(`date`, `total_revenue`, `total_orders`, `avg_order_value`).
+Kết quả: tạo/ghi đè các bảng cấu hình trong `warehouse.db`, bao gồm `dim_customers`, `dim_products`, `fact_orders`, `fact_order_details`, `raw_sales` và `fact_daily_sales` (`date`, `total_revenue`, `total_orders`, `avg_order_value`).
 
-> MySQL không bắt buộc. Nếu kết nối MySQL thất bại, pipeline vẫn chạy với dữ liệu từ thư mục file.
+> Nếu một nguồn MySQL không kết nối/đọc được, pipeline in cảnh báo và tiếp tục nạp các nguồn còn lại.
 
 ### Bước 4 — Chạy Backend (.NET)
 
@@ -92,15 +87,6 @@ dotnet run
 - Swagger (Development): `http://localhost:5136/swagger`
 - API chính: `GET /api/dashboard/summary`
 
-**Lưu ý port:** Frontend đang gọi `http://localhost:5000`. Có 2 cách khớp:
-
-```bash
-# Cách A: chạy backend đúng port frontend đang gọi
-dotnet run --urls "http://localhost:5000"
-
-# Cách B: sửa URL trong frontend/src/App.jsx cho khớp port 5136
-```
-
 ### Bước 5 — Chạy Frontend (React)
 
 ```bash
@@ -109,13 +95,19 @@ npm install
 npm run dev
 ```
 
-Mở URL Vite in ra terminal (thường `http://localhost:5173`).
+Frontend mặc định gọi backend tại `http://localhost:5136`, khớp với profile BE. Để dùng địa chỉ khác, tạo `frontend/.env.local` với nội dung:
+
+```dotenv
+VITE_API_BASE_URL=http://localhost:5136
+```
+
+Khởi động lại Vite sau khi sửa biến môi trường. Mở URL Vite in ra terminal (thường `http://localhost:5173`).
 
 ### Kiểm tra nhanh local
 
 1. ETL chạy xong → có file `warehouse.db` ở root  
-2. `GET http://localhost:<port>/api/dashboard/summary` trả JSON KPI + `chartData`  
-3. Dashboard hiển thị Total Revenue / Total Orders / Avg Order Value + line chart  
+2. Backend trả dữ liệu từ `GET /api/dashboard/overview`, `GET /api/dashboard/tables`, và `GET /api/dashboard/summary`
+3. Dashboard hiển thị overview các bảng, preview từng bảng và tab doanh thu ngày
 
 ## 2. Build release / production
 
@@ -171,13 +163,13 @@ npm run preview
 
 Deploy static (`dist/`) lên Nginx, IIS, Cloudflare Pages, S3+CloudFront, v.v.
 
-Trước khi release, đổi API URL cứng trong `App.jsx` sang biến môi trường / URL production, ví dụ:
+Trước khi build production, cấu hình URL backend trong `frontend/.env.production`:
 
-```js
-axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/dashboard/summary`)
+```dotenv
+VITE_API_BASE_URL=https://api.example.com
 ```
 
-và set `VITE_API_BASE_URL` khi build.
+Vite sẽ nhúng URL này vào frontend khi chạy `npm run build`.
 
 ### Gợi ý layout release
 
@@ -219,7 +211,7 @@ dist/
 | Triệu chứng | Nguyên nhân thường gặp |
 |---|---|
 | `warehouse.db not found` | Chưa chạy `etl_pipeline.py`, hoặc backend chạy sai working directory |
-| Frontend lỗi kết nối API | Port mismatch (5000 vs 5136) hoặc CORS/backend chưa chạy |
+| Frontend lỗi kết nối API | Backend chưa chạy, hoặc `VITE_API_BASE_URL` không khớp URL backend |
 | ETL `KeyError` cột | File trong `etl/data` không khớp `schema_mapping` (cần `order_id`, `timestamp`, `amount`) |
 | MySQL extract trống | Sai credential / DB chưa tạo — pipeline vẫn tiếp tục với file source |
 
@@ -232,8 +224,7 @@ Private / PlayTime project.
 
 ### Điểm cần lưu ý khi viết README (đã gắn trong nội dung trên)
 
-1. **Port lệch:** Frontend gọi `:5000`, backend mặc định `:5136`.
-2. **Schema ETL:** Chỉ file kiểu `sales_raw.csv` khớp mapping; các CSV Northwind khác (`orders.csv`, …) không có `timestamp`/`amount` — có thể làm transform lỗi nếu nằm chung thư mục `etl/data`.
-3. **Chưa có `requirements.txt`** — README hướng dẫn cài tay.
+1. **Backend URL:** Frontend mặc định gọi `http://localhost:5136`; đổi bằng `VITE_API_BASE_URL` nếu backend chạy ở địa chỉ khác.
+2. **Schema ETL:** `sales_raw.csv` dùng mapping timestamp/amount; các CSV Northwind được nạp riêng theo schema nguồn.
 
 Nếu muốn tôi tạo file `README.md` sẵn trong repo, hãy chuyển sang **Agent mode** và nhờ lại.
