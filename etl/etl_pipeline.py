@@ -27,7 +27,7 @@ def extract_from_mysql(config):
         connection_url = URL.create(
             drivername="mysql+pymysql",
             username="root",
-            password="Kien@123",
+            password="root",
             host="localhost",
             port=3306,
             database="sales_db",

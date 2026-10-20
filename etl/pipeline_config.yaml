@@ -3,7 +3,7 @@ mysql: &mysql_source
   host: "localhost"
   port: 3306
   user: "root"
-  password: "Kien@123"
+  password: "root"
   database: "sales_db"
   table_name: "orders"
   watermark_column: "created_at"  # Cột thời gian để thực hiện Incremental Extract
